@@ -15,19 +15,24 @@ server.bind(ADDR)
 
 clients = []
 names = {}
-chat_history = []  # Historia czatu
+chat_history = []
 lock = threading.Lock()
 cout_lock = threading.Lock()
 
 def broadcast(msg, sender_conn=None):
     with lock:
         for client in clients.copy():
-            try:
-                client.send(msg.encode(FORMAT))
-            except:
-                clients.remove(client)
-                if client in names:
-                    del names[client]
+            if client != sender_conn:
+                try:
+                    client.send(msg.encode(FORMAT))
+                except:
+                    # Błąd - usuwamy klienta
+                    try:
+                        clients.remove(client)
+                        if client in names:
+                            del names[client]
+                    except:
+                        pass
 
 def handle_client(conn, addr):
     with cout_lock:
@@ -44,16 +49,19 @@ def handle_client(conn, addr):
 
         # Wyślij historię czatu do nowego klienta
         with lock:
-            for msg in chat_history:
-                try:
-                    conn.send(msg.encode(FORMAT))
-                except:
-                    pass
+            history_text = "\n".join(chat_history)
+        if history_text:
+            try:
+                conn.send(history_text.encode(FORMAT))
+            except:
+                pass
 
     except:
         with lock:
             if conn in clients:
                 clients.remove(conn)
+            if conn in names:
+                del names[conn]
         conn.close()
         return
 
@@ -67,13 +75,14 @@ def handle_client(conn, addr):
 
                 if msg == DISCONNECT_MESSAGE:
                     connected = False
+
                 elif msg == CLEAR_COMMAND:
-                    # Czyszczenie historii
                     with lock:
                         chat_history.clear()
                     broadcast("[SERVER]: Chat history has been cleared by a user.")
                     with cout_lock:
                         print(f"[{addr}] {name} cleared chat history.")
+
                 else:
                     time_sent = datetime.now().strftime("%H:%M:%S")
                     with lock:
@@ -81,10 +90,11 @@ def handle_client(conn, addr):
                     formatted_msg = f"{time_sent} {sender_name}: {msg}"
 
                     with lock:
-                        chat_history.append(formatted_msg)  # Zapisz do historii
+                        chat_history.append(formatted_msg)
                     with cout_lock:
                         print(f"[{addr}] {formatted_msg}")
                     broadcast(formatted_msg, conn)
+
         except:
             break
 
