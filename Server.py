@@ -97,6 +97,7 @@ def handle_client(conn, addr):
                 elif msg == CLEAR_COMMAND:
                     with lock:
                         chat_history.clear()
+                    broadcast("!CLEAR")
                     broadcast("[SERVER]: Chat history has been cleared by a user.")
                     with cout_lock:
                         print(f"[{addr}] {name} cleared chat history.")
