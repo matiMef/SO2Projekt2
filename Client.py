@@ -17,27 +17,51 @@ class ChatClient:
         self.connected = False
         self.name = ""
         self.root = root
+        self.root.config(bg="#3d3d3d")
         self.root.title("Chat App")
+        self.root.resizable(False, False)
         
         # GUI setup
-        self.chat_box = scrolledtext.ScrolledText(root, width=60, height=20, state='disabled')
+        button_style = {
+            "bg": "#949393",
+            "fg": "white",
+            "activebackground": "white",
+            "relief": "flat",    
+            "font": ("Arial", 9, "bold"),
+            "width": 8
+        }
+
+        chat_style = {
+            "bg": "#d2d2d2",
+            "fg": "black",
+            "font": ("Arial", 8 ,"bold"),
+        }
+
+        entry_style = {
+            "bg": "#949393",
+            "fg": "white",
+            "font": ("Arial", 10, "bold"),
+            "relief": "flat"
+        }
+
+        self.chat_box = scrolledtext.ScrolledText(root, width=91, height=20, state='disabled', **chat_style)
         self.chat_box.pack(padx=10, pady=5)
 
-        self.entry_field = tk.Entry(root, width=50)
+        self.entry_field = tk.Entry(root, width=38, **entry_style)
         self.entry_field.pack(padx=10, pady=5, side=tk.LEFT)
         self.entry_field.bind("<Return>", self.send_msg_enter)
 
 
-        self.send_button = tk.Button(root, text="Send", command=self.send_msg)
+        self.send_button = tk.Button(root, text="Send", command=self.send_msg, **button_style)
         self.send_button.pack(padx=5, pady=5, side=tk.LEFT)
 
-        self.connect_button = tk.Button(root, text="!CONNECT", command=self.connect)
+        self.connect_button = tk.Button(root, text="Connect", command=self.connect, **button_style)
         self.connect_button.pack(padx=5, pady=5, side=tk.LEFT)
 
-        self.disconnect_button = tk.Button(root, text="!DISCONNECT", command=self.disconnect)
+        self.disconnect_button = tk.Button(root, text="Disconnect", command=self.disconnect, **button_style)
         self.disconnect_button.pack(padx=5, pady=5, side=tk.LEFT)
 
-        self.clear_button = tk.Button(root, text="cls", command=lambda: self.send_special(CLEAR_COMMAND))
+        self.clear_button = tk.Button(root, text="Clear", command=lambda: self.send_special(CLEAR_COMMAND),  **button_style)
         self.clear_button.pack(padx=5, pady=5, side=tk.LEFT)
 
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
@@ -54,6 +78,20 @@ class ChatClient:
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.client.connect(ADDR)
+            # Check if server is full
+            try:
+                self.client.settimeout(1.0)  # short timeout to read initial server response
+                response = self.client.recv(1024).decode(FORMAT)
+                if response == "SERVER_FULL":
+                    self.write_chat("[INFO] Server is full. Try again later.")
+                    self.client.close()
+                    self.connected = False
+                    return
+            except socket.timeout:
+                pass
+            finally:
+                self.client.settimeout(None)  # reset timeout
+           
             self.send_name()
             self.connected = True
             threading.Thread(target=self.receive_msg, daemon=True).start()
@@ -110,6 +148,7 @@ class ChatClient:
             except:
                 if self.connected:
                     self.write_chat("[ERROR] Connection lost.")
+                    self.connected = False
                 break
 
     def disconnect(self):
