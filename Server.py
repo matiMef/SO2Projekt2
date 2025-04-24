@@ -20,7 +20,8 @@ CLEAR_COMMAND = "cls"
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # binding the server to the address and port
 server.bind(ADDR)
-
+max_connections = 10 #maximum number of connections
+max_connections_semaphore = threading.Semaphore(max_connections) # maximum number of connections
 
 # lists and dictionaries to manage clients and chat history
 clients = []
@@ -49,7 +50,6 @@ def broadcast(msg, sender_conn=None):
 def handle_client(conn, addr):
     with cout_lock:
         print(f"[NEW CONNECTION] {addr} connected.")
-
     with lock:
         # add the new client to the list of clients
         clients.append(conn)
@@ -78,6 +78,7 @@ def handle_client(conn, addr):
             if conn in names:
                 del names[conn]
         conn.close()
+        max_connections_semaphore.release() 
         return
 
     # send a message to all clients that a new user has joined
@@ -93,6 +94,7 @@ def handle_client(conn, addr):
                 # check if the message is a disconnect message or a clear command
                 if msg == DISCONNECT_MESSAGE:
                     connected = False
+                    max_connections_semaphore.release() 
 
                 elif msg == CLEAR_COMMAND:
                     with lock:
@@ -143,13 +145,20 @@ def start():
     while True:
         # accept incoming connections
         conn, addr = server.accept()
+        if not max_connections_semaphore.acquire(blocking=False):
+            try:
+                conn.send("SERVER_FULL".encode(FORMAT))
+            except:
+                pass
+            conn.close()
+            continue
         # create a new thread for each client connection
         thread = threading.Thread(target=handle_client, args=(conn, addr))
         # start the thread 
         thread.start()
         with cout_lock:
             print(f"[ACTIVE CONNECTIONS] {threading.active_count() - 1}")
-
+        
 with cout_lock:
     print("[STARTING] Server is starting...")
 
